@@ -132,6 +132,7 @@ app.get("/movies", isLoggedIn, function(req, res) {
     axios.get('https://api.themoviedb.org/3/movie/popular?api_key=7d8ba4c597c228d41218fa5b27ac871e&language=en-US&page=1')
     .then(r => {
     const headerDate = r.headers && r.headers.date ? r.headers.date : 'no response date';
+    console.log(r.data.results);
     var movie = new Movie()
     movie.collection.drop();
     r.data.results.forEach(m => {
@@ -139,6 +140,7 @@ app.get("/movies", isLoggedIn, function(req, res) {
         movie.title=m.title;
         movie.user_vote=m.vote_average;
         movie.overview=m.overview;
+        movie.relaseDate=m.release_date;
         movie.image=`https://image.tmdb.org/t/p/w500`+m.poster_path;
         movies.push(movie);
         movie.save(function(err) {
@@ -166,7 +168,7 @@ app.get("/music", isLoggedIn,function(req, res) {
     axios.get('https://ws.audioscrobbler.com/2.0/?method=chart.gettoptracks&api_key=4744bff0f3dceb7a221996c9def110fe&format=json')
     .then(r => {
     const headerDate = r.headers && r.headers.date ? r.headers.date : 'no response date';
-    console.log(r.data.tracks.track);
+    //console.log(r.data.tracks.track);
     var song = new Music()
     song.collection.drop();
     r.data.tracks.track.forEach(s => {

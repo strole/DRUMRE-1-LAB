@@ -10,6 +10,7 @@ var movieSchema = mongoose.Schema({
     title: String,
     user_vote: String,
     overview: String,
+    relaseDate: String,
     image: String
 });
 
