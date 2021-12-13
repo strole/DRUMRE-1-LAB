@@ -23,7 +23,7 @@ var strategy = new Auth0Strategy(
     callbackURL:
       process.env.AUTH0_CALLBACK_URL ||
       "http://localhost:3000/callback" ||
-      "https://nrrpw.herokuapp.com//callback",
+      "https://nrrpw.herokuapp.com/callback",
   },
   function (accessToken, refreshToken, extraParams, profile, done) {
     // accessToken is the token to call Auth0 API (not needed in the most cases)
