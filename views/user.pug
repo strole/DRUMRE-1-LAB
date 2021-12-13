@@ -1,0 +1,29 @@
+extends layout
+
+
+
+block content
+  .w3-card-4
+    h1 Welcome #{user.nickname}
+    img(src=user.picture)
+    h2 User profile
+    div.span4#register_webinar
+    input(type="checkbox", name="hacked",id="hacked", onclick="hackedfunction()")
+    | Hacked
+    br
+    br
+    div(id="hackeddiv", style='display:none')
+      <a href="/session">
+      <button>Show stats</button>
+      </a>
+    div(id="nothackeddiv")
+      <form method="post" action="/session">
+        <fieldset>
+          <input type="hidden" name="extra_submit_param" value="extra_submit_value">
+          <button type="submit" name="submit_param" value="submit_value" class="link-button">
+          | Show stats
+          </button>
+        </fieldset>
+      </form>
+
+

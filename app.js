@@ -1,202 +1,130 @@
-const express = require("express");
+var express = require("express");
+var path = require("path");
+var logger = require("morgan");
+var cookieParser = require("cookie-parser");
+var session = require("express-session");
+var dotenv = require("dotenv");
+var passport = require("passport");
+var Auth0Strategy = require("passport-auth0");
+var flash = require("connect-flash");
+var userInViews = require("./lib/middleware/userInViews");
+var authRouter = require("./routes/auth");
+var indexRouter = require("./routes/index");
+var usersRouter = require("./routes/users");
+
+dotenv.config();
+
+// Configure Passport to use Auth0
+var strategy = new Auth0Strategy(
+  {
+    domain: process.env.AUTH0_DOMAIN,
+    clientID: process.env.AUTH0_CLIENT_ID,
+    clientSecret: process.env.AUTH0_CLIENT_SECRET,
+    callbackURL:
+      process.env.AUTH0_CALLBACK_URL || "http://localhost:3000/callback",
+  },
+  function (accessToken, refreshToken, extraParams, profile, done) {
+    // accessToken is the token to call Auth0 API (not needed in the most cases)
+    // extraParams.id_token has the JSON Web Token
+    // profile has all the information from the user
+    return done(null, profile);
+  }
+);
+
+passport.use(strategy);
+
+// You can use this section to keep a smaller payload
+passport.serializeUser(function (user, done) {
+  done(null, user);
+});
+
+passport.deserializeUser(function (user, done) {
+  done(null, user);
+});
 
 const app = express();
 
-const passport = require("passport");
+// View engine setup
+app.set("views", path.join(__dirname, "views"));
+app.set("view engine", "pug");
 
-const axios = require("axios");
+app.use(logger("dev"));
+app.use(cookieParser());
 
-const session = require("express-session");
+// config express-session
+var sess = {
+  secret: "CHANGE THIS SECRET",
+  cookie: {},
+  resave: false,
+  saveUninitialized: true,
+};
 
-const User = require("./models/User");
-const Movie = require("./models/Movie");
-const Music = require("./models/Music");
+if (app.get("env") === "production") {
+  // If you are using a hosting provider which uses a proxy (eg. Heroku),
+  // comment in the following app.set configuration command
+  //
+  // Trust first proxy, to prevent "Unable to verify authorization request state."
+  // errors with passport-auth0.
+  // Ref: https://github.com/auth0/passport-auth0/issues/70#issuecomment-480771614
+  // Ref: https://www.npmjs.com/package/express-session#cookiesecure
+  // app.set('trust proxy', 1);
 
-const facebookStrategy = require("passport-facebook").Strategy;
-
-app.set("view engine", "ejs");
-app.use(
-  session({
-    secret: "ilovescotchscotchyscotchscotch",
-    resave: true,
-    saveUninitialized: true,
-  })
-);
-app.use(passport.initialize());
-app.use(passport.session());
-
-passport.use(
-  new facebookStrategy(
-    {
-      // pull in our app id and secret from our auth.js file
-      clientID: "424299486037523",
-      clientSecret: "3c920d97f9328d1768619c1b629028eb",
-      callbackURL: "http://localhost:5000/facebook/callback",
-      profileFields: [
-        "id",
-        "displayName",
-        "name",
-        "gender",
-        "picture.type(large)",
-        "email",
-      ],
-    }, // facebook will send back the token and profile
-    function (token, refreshToken, profile, done) {
-      // asynchronous
-      process.nextTick(function () {
-        // find the user in the database based on their facebook id
-        User.findOne({ uid: profile.id }, function (err, user) {
-          // if there is an error, stop everything and return that
-          // ie an error connecting to the database
-          if (err) return done(err);
-
-          // if the user is found, then log them in
-          if (user) {
-            console.log("user found");
-            //console.log(user)
-            return done(null, user); // user found, return that user
-          } else {
-            // if there is no user found with that facebook id, create them
-            var newUser = new User();
-
-            // set all of the facebook information in our user model
-            newUser.uid = profile.id; // set the users facebook id
-            newUser.token = token; // we will save the token that facebook provides to the user
-            newUser.name =
-              profile.name.givenName + " " + profile.name.familyName; // look at the passport user profile to see how names are returned
-            newUser.email = profile.emails[0].value; // facebook can return multiple emails so we'll take the first
-            newUser.pic = profile.photos[0].value;
-            // save our user to the database
-            newUser.save(function (err) {
-              if (err) throw err;
-
-              // if successful, return the new user
-              return done(null, newUser);
-            });
-          }
-        });
-      });
-    }
-  )
-);
-
-passport.serializeUser(function (user, done) {
-  done(null, user.id);
-});
-
-// used to deserialize the user
-passport.deserializeUser(function (id, done) {
-  User.findById(id, function (err, user) {
-    done(err, user);
-  });
-});
-
-app.get("/profile", isLoggedIn, function (req, res) {
-  //console.log(req.user)
-  res.render("profile", {
-    user: req.user, // get the user out of session and pass to template
-  });
-});
-
-// route middleware to make sure
-function isLoggedIn(req, res, next) {
-  // if user is authenticated in the session, carry on
-  if (req.isAuthenticated()) return next();
-
-  // if they aren't redirect them to the home page
-  res.redirect("/");
+  sess.cookie.secure = true; // serve secure cookies, requires https
 }
 
-app.get(
-  "/auth/facebook",
-  passport.authenticate("facebook", { scope: "email" })
-);
+app.use(session(sess));
 
-app.get(
-  "/facebook/callback",
-  passport.authenticate("facebook", {
-    successRedirect: "/profile",
-    failureRedirect: "/",
-  })
-);
+app.use(passport.initialize());
+app.use(passport.session());
+app.use(express.static(path.join(__dirname, "public")));
 
-app.get("/", (req, res) => {
-  //console.log(req.body)
-  res.render("index");
+app.use(flash());
+
+// Handle auth failure error messages
+app.use(function (req, res, next) {
+  if (req && req.query && req.query.error) {
+    req.flash("error", req.query.error);
+  }
+  if (req && req.query && req.query.error_description) {
+    req.flash("error_description", req.query.error_description);
+  }
+  next();
 });
 
-app.listen(5000, () => {
-  console.log("App is listening on Port 5000");
+app.use(userInViews());
+app.use("/", authRouter);
+app.use("/", indexRouter);
+app.use("/", usersRouter);
+
+// Catch 404 and forward to error handler
+app.use(function (req, res, next) {
+  const err = new Error("Not Found");
+  err.status = 404;
+  next(err);
 });
 
-app.get("/logout", function (req, res) {
-  req.logout();
-  res.redirect("/");
-});
+// Error handlers
 
-app.get("/movies", isLoggedIn, function (req, res) {
-  var movies = [];
-  axios
-    .get(
-      "https://api.themoviedb.org/3/movie/popular?api_key=7d8ba4c597c228d41218fa5b27ac871e&language=en-US&page=1"
-    )
-    .then((r) => {
-      const headerDate =
-        r.headers && r.headers.date ? r.headers.date : "no response date";
-      console.log(r.data.results);
-      var movie = new Movie();
-      movie.collection.drop();
-      r.data.results.forEach((m) => {
-        var movie = new Movie();
-        movie.title = m.title;
-        movie.user_vote = m.vote_average;
-        movie.overview = m.overview;
-        movie.relaseDate = m.release_date;
-        movie.image = `https://image.tmdb.org/t/p/w500` + m.poster_path;
-        movies.push(movie);
-        movie.save(function (err) {
-          if (err) throw err;
-        });
-      });
-
-      res.render("movies", {
-        movieList: movies,
-      });
-    })
-    .catch((err) => {
-      console.log("Error: ", err.message);
+// Development error handler
+// Will print stacktrace
+if (app.get("env") === "development") {
+  app.use(function (err, req, res, next) {
+    res.status(err.status || 500);
+    res.render("error", {
+      message: err.message,
+      error: err,
     });
+  });
+}
+
+// Production error handler
+// No stacktraces leaked to user
+app.use(function (err, req, res, next) {
+  res.status(err.status || 500);
+  res.render("error", {
+    message: err.message,
+    error: {},
+  });
 });
 
-app.get("/music", isLoggedIn, function (req, res) {
-  var music = [];
-  axios
-    .get(
-      "https://ws.audioscrobbler.com/2.0/?method=chart.gettoptracks&api_key=4744bff0f3dceb7a221996c9def110fe&format=json"
-    )
-    .then((r) => {
-      const headerDate =
-        r.headers && r.headers.date ? r.headers.date : "no response date";
-      //console.log(r.data.tracks.track);
-      var song = new Music();
-      song.collection.drop();
-      r.data.tracks.track.forEach((s) => {
-        var song = new Music();
-        song.name = s.name;
-        song.url = s.url;
-        song.artist = s.artist.name;
-        song.image = s.image[3]["#text"];
-        music.push(song);
-        song.save(function (err) {
-          if (err) throw err;
-        });
-      });
-
-      res.render("music", {
-        songList: music,
-      });
-    })
-    .catch((err) => {
-      console.log("Error: ", err.message);
-    });
-});
+module.exports = app;

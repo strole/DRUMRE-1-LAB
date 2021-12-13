@@ -1,0 +1,13 @@
+extends layout
+
+block content
+  .w3-container
+    if locals.user
+      h4 You are logged in!
+    else
+      h4 You are not logged in! Please #[a(href="/login") Log In] to continue.
+      input(type="checkbox",id="hackedcat" name="hackedcat", value="true", onclick="hackedcatfunction()")
+      | Hacked
+      div(id="divhackedcat" style="display:none")
+        | Add "/cats" in the link to acces page unauthorized
+
